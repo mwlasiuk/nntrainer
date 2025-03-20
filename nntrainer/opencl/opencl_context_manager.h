@@ -33,9 +33,14 @@ class ContextManager {
   /**
    * @brief Create a Default GPU Device object
    *
+   * @param platform_idx index of platform to be used
+   * @param device_idx index of device from choosen platform to be used
+   * @param type type of device to be used
    * @return true if successful or false otherwise
    */
-  bool CreateDefaultGPUDevice();
+  bool CreateDefaultDevice(const size_t platform_idx = 0,
+                           const size_t device_idx = 0,
+                           const cl_device_type type = CL_DEVICE_TYPE_GPU);
 
   /**
    * @brief Create OpenCL context
@@ -48,7 +53,7 @@ class ContextManager {
    * @brief Private constructor to prevent object creation
    *
    */
-  ContextManager(){};
+  ContextManager() {};
 
 public:
   /**
