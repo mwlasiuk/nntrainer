@@ -49,7 +49,7 @@ const cl_context &ContextManager::GetContext() {
   bool result = true;
 
   do {
-    result = CreateDefaultGPUDevice();
+    result = CreateDefaultDevice();
     if (!result) {
       break;
     }
@@ -99,11 +99,16 @@ ContextManager::~ContextManager() {
 }
 
 /**
- * @brief Create a Default GPU Device object
+ * @brief Create a Default Device object
  *
+ * @param platform_idx index of platform to be used
+ * @param device_idx index of device from choosen platform to be used
+ * @param type type of device to be used
  * @return true if successful or false otherwise
  */
-bool ContextManager::CreateDefaultGPUDevice() {
+bool ContextManager::CreateDefaultDevice(const size_t platform_idx,
+                                         const size_t device_idx,
+                                         const cl_device_type type) {
   cl_uint num_platforms;
 
   // returns number of OpenCL supported platforms
@@ -115,6 +120,8 @@ bool ContextManager::CreateDefaultGPUDevice() {
   if (num_platforms == 0) {
     ml_loge("No supported OpenCL platform.");
     return false;
+  } else {
+    ml_logi("Number of available OpenCL platforms : %u", num_platforms);
   }
 
   // getting the platform IDs
@@ -125,35 +132,51 @@ bool ContextManager::CreateDefaultGPUDevice() {
     return false;
   }
 
+  if (platform_idx > num_platforms) {
+    ml_loge("Requested platform index %zu but there are only %zu platforms "
+            "available on system",
+            platform_idx, num_platforms);
+    return false;
+  }
+
   // platform is a specific OpenCL implementation, for instance ARM
-  cl_platform_id platform_id_ = platforms[0];
+  platform_id_ = platforms[platform_idx];
 
   cl_uint num_devices;
 
-  // getting available GPU devices
-  status =
-    clGetDeviceIDs(platform_id_, CL_DEVICE_TYPE_GPU, 0, nullptr, &num_devices);
+  // getting available devices
+  status = clGetDeviceIDs(platform_id_, type, 0, nullptr, &num_devices);
   if (status != CL_SUCCESS) {
     ml_loge("clGetDeviceIDs returned %d", status);
     return false;
   }
   if (num_devices == 0) {
-    ml_loge("No GPU on current platform.");
+    ml_loge("No devices of type %d on current platform.", type);
     return false;
+  } else {
+    ml_logi(
+      "Number of available OpenCL devices for platform %zu of type %u : %u",
+      platform_idx, type, num_devices);
   }
 
-  // getting the GPU device IDs
+  // getting the device IDs
   std::vector<cl_device_id> devices(num_devices);
-  status = clGetDeviceIDs(platform_id_, CL_DEVICE_TYPE_GPU, num_devices,
-                          devices.data(), nullptr);
+  status =
+    clGetDeviceIDs(platform_id_, type, num_devices, devices.data(), nullptr);
   if (status != CL_SUCCESS) {
     ml_loge("clGetDeviceIDs returned %d", status);
     return false;
   }
 
-  // setting the first GPU ID and platform (ARM)
-  device_id_ = devices[0];
-  this->platform_id_ = platform_id_;
+  if (device_idx > num_devices) {
+    ml_loge("Requested device index %zu but there are only %zu devices "
+            "available for platform %zu",
+            device_idx, num_devices, platform_idx);
+    return false;
+  }
+
+  // setting the device
+  device_id_ = devices[device_idx];
 
 #ifdef ENABLE_FP16
   // check for fp16 (half) support available on device
