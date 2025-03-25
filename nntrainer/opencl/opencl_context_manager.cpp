@@ -126,7 +126,7 @@ bool ContextManager::CreateDefaultGPUDevice() {
   }
 
   // platform is a specific OpenCL implementation, for instance ARM
-  cl_platform_id platform_id_ = platforms[0];
+  platform_id_ = platforms[0];
 
   cl_uint num_devices;
 
@@ -153,7 +153,6 @@ bool ContextManager::CreateDefaultGPUDevice() {
 
   // setting the first GPU ID and platform (ARM)
   device_id_ = devices[0];
-  this->platform_id_ = platform_id_;
 
 #ifdef ENABLE_FP16
   // check for fp16 (half) support available on device
