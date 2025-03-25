@@ -31,24 +31,47 @@ class ContextManager {
   cl_context context_{nullptr};
 
   /**
-   * @brief Create a Default GPU Device object
+   * @brief Checks whether selected OpenCL device supports requested extension.
+   *
+   * @param extension requested extension
+   *
+   * @return true if device supports extension
+   */
+  bool CheckDeviceExtensionSupport(const char *extension);
+
+  /**
+   * @brief Create OpenCL platform
    *
    * @return true if successful or false otherwise
    */
-  bool CreateDefaultGPUDevice();
+  bool CreateOpenCLPlatform();
+
+  /**
+   * @brief Create OpenCL device
+   *
+   * @return true if successful or false otherwise
+   */
+  bool CreateOpenCLDevice();
 
   /**
    * @brief Create OpenCL context
    *
    * @return true if successful or false otherwise
    */
-  bool CreateCLContext();
+  bool CreateOpenCLContext();
+
+  /**
+   * @brief Create default OpenCL handles (platform, device and context)
+   *
+   * @return true if successful or false otherwise
+   */
+  bool CreateDefaultOpenCLHandles();
 
   /**
    * @brief Private constructor to prevent object creation
    *
    */
-  ContextManager(){};
+  ContextManager() {};
 
 public:
   /**
