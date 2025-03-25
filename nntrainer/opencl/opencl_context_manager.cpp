@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "opencl_loader.h"
+#include "third_party/cl.h"
 
 #include <nntrainer_log.h>
 
@@ -49,12 +50,7 @@ const cl_context &ContextManager::GetContext() {
   bool result = true;
 
   do {
-    result = CreateDefaultGPUDevice();
-    if (!result) {
-      break;
-    }
-
-    result = CreateCLContext();
+    result = CreateDefaultOpenCLHandles();
     if (!result) {
       break;
     }
@@ -72,6 +68,10 @@ const cl_context &ContextManager::GetContext() {
   return context_;
 }
 
+/**
+ * @brief Release OpenCL context
+ *
+ */
 void ContextManager::ReleaseContext() {
   if (context_) {
     // decrements the context reference count
@@ -99,15 +99,52 @@ ContextManager::~ContextManager() {
 }
 
 /**
- * @brief Create a Default GPU Device object
+ * @brief Checks whether selected OpenCL device supports requested extension.
+ *
+ * @param extension requested extension
+ *
+ * @return true if device supports extension
+ */
+bool ContextManager::CheckDeviceExtensionSupport(const char *extension) {
+  cl_int status = CL_SUCCESS;
+  size_t extension_size = 0;
+
+  status =
+    clGetDeviceInfo(device_id_, CL_DEVICE_EXTENSIONS, 0, NULL, &extension_size);
+  if (status != CL_SUCCESS) {
+    ml_loge("clGetDeviceInfo returned %d", status);
+    return false;
+  }
+
+  std::vector<char> extensions(extension_size);
+  status = clGetDeviceInfo(device_id_, CL_DEVICE_EXTENSIONS, extension_size,
+                           extensions.data(), NULL);
+  if (status != CL_SUCCESS) {
+    ml_loge("clGetDeviceInfo returned %d", status);
+    return false;
+  }
+
+  if (std::string(extensions.data()).find(extension) == std::string::npos) {
+    ml_loge("Extension %s is not supported by given device", extension);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * @brief Create OpenCL platform
  *
  * @return true if successful or false otherwise
  */
-bool ContextManager::CreateDefaultGPUDevice() {
-  cl_uint num_platforms;
+bool ContextManager::CreateOpenCLPlatform() {
+  const size_t default_platform_index = 0;
+
+  cl_int status = CL_SUCCESS;
+  cl_uint num_platforms = 0;
 
   // returns number of OpenCL supported platforms
-  cl_int status = clGetPlatformIDs(0, nullptr, &num_platforms);
+  status = clGetPlatformIDs(0, nullptr, &num_platforms);
   if (status != CL_SUCCESS) {
     ml_loge("clGetPlatformIDs returned %d", status);
     return false;
@@ -126,9 +163,21 @@ bool ContextManager::CreateDefaultGPUDevice() {
   }
 
   // platform is a specific OpenCL implementation, for instance ARM
-  platform_id_ = platforms[0];
+  platform_id_ = platforms[default_platform_index];
 
-  cl_uint num_devices;
+  return true;
+}
+
+/**
+ * @brief Create OpenCL device
+ *
+ * @return true if successful or false otherwise
+ */
+bool ContextManager::CreateOpenCLDevice() {
+  const size_t default_device_index = 0;
+
+  cl_int status = CL_SUCCESS;
+  cl_uint num_devices = 0;
 
   // getting available GPU devices
   status =
@@ -152,32 +201,7 @@ bool ContextManager::CreateDefaultGPUDevice() {
   }
 
   // setting the first GPU ID and platform (ARM)
-  device_id_ = devices[0];
-
-#ifdef ENABLE_FP16
-  // check for fp16 (half) support available on device
-  // getting extensions
-  size_t extension_size;
-  status =
-    clGetDeviceInfo(device_id_, CL_DEVICE_EXTENSIONS, 0, NULL, &extension_size);
-  if (status != CL_SUCCESS) {
-    ml_loge("clGetDeviceInfo returned %d", status);
-    return false;
-  }
-
-  std::vector<char> extensions(extension_size);
-  status = clGetDeviceInfo(device_id_, CL_DEVICE_EXTENSIONS, extension_size,
-                           extensions.data(), NULL);
-  if (status != CL_SUCCESS) {
-    ml_loge("clGetDeviceInfo returned %d", status);
-    return false;
-  }
-
-  if (std::string(extensions.data()).find("cl_khr_fp16") == std::string::npos) {
-    ml_loge("fp16 (half) is not supported by device");
-    return false;
-  }
-#endif
+  device_id_ = devices[default_device_index];
 
   return true;
 }
@@ -187,8 +211,8 @@ bool ContextManager::CreateDefaultGPUDevice() {
  *
  * @return true if successful or false otherwise
  */
-bool ContextManager::CreateCLContext() {
-  int error_code;
+bool ContextManager::CreateOpenCLContext() {
+  cl_int error_code = CL_SUCCESS;
   cl_context_properties properties[] = {CL_CONTEXT_PLATFORM,
                                         (cl_context_properties)platform_id_, 0};
 
@@ -199,6 +223,35 @@ bool ContextManager::CreateCLContext() {
   if (!context_) {
     ml_loge("Failed to create a compute context. OpenCL error code: %d",
             error_code);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * @brief Create default OpenCL handles (platform, device and context)
+ *
+ * @return true if successful or false otherwise
+ */
+bool ContextManager::CreateDefaultOpenCLHandles() {
+  if (!CreateOpenCLPlatform()) {
+    return false;
+  }
+
+  if (!CreateOpenCLDevice()) {
+    return false;
+  }
+
+#ifdef ENABLE_FP16
+  // check for fp16 (half) support available on device
+  // getting extensions
+  if (!CheckDeviceExtensionSupport("cl_khr_fp16")) {
+    return false;
+  }
+#endif
+
+  if (!CreateOpenCLContext()) {
     return false;
   }
 
